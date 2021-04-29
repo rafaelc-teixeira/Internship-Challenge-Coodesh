@@ -1,0 +1,7 @@
+{
+  "name": "devcast-api",
+  "version": "1.0.0",
+  "main": "index.js",
+  "author": "Rafael Teixeira",
+  "license": "MIT"
+}
