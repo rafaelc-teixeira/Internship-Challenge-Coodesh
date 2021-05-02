@@ -3,5 +3,12 @@
   "version": "1.0.0",
   "main": "index.js",
   "author": "Rafael Teixeira",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "mysql": "^2.18.1",
+    "rss-parser": "^3.12.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.7"
+  }
 }
