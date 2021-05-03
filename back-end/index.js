@@ -1,7 +1,9 @@
 const mysql = require("mysql");
 const http = require('http');
-const Todo = require('./todoController');
 const { getPostData } = require('./utils');
+
+let Parser = require('rss-parser');
+let parser = new Parser();
 
 const mysqlConnection = mysql.createConnection({
 	host : "192.168.0.6",
@@ -11,65 +13,133 @@ const mysqlConnection = mysql.createConnection({
 });
 
 //Teste controller
-const findAll = () => {
+const findAllPodcasts = () => {
 	return new Promise((resolve, reject) => {
-		let sql = 'SELECT * FROM podcast INNER JOIN ep on podcast.id_podcast = ep.podcast_id';
+		let sql = 'SELECT * FROM podcast';
 		let query = mysqlConnection.query(sql, (err, results) => {
 			if (err){
 				throw err;
 			}
-			console.log(results);
 			resolve(results);			
 		});
 	});
 };
 
+const findById = (id) => {
+	return new Promise((resolve, reject) => {
+		let sql = `SELECT * FROM podcast INNER JOIN ep on podcast.id_podcast = ${id} AND ep.podcast_id = ${id}`;
+		let query = mysqlConnection.query(sql, (err, results) => {
+			if (err){
+				throw err;
+			}
+			resolve(results);			
+		});
+	});
+};
+
+const create = async (url) => {
+	try {
+		let feed = await parser.parseURL(url.url);
+		return new Promise((resolve, reject) => {
+			//adição do podcast na tabela
+			let postPodcast = {
+				name_podcast: feed.title,
+				thumbnail_podcast: feed.image.url,
+				url_podcast: feed.link,
+				qtdep: 244
+			};
+			let sql = 'INSERT INTO podcast SET ?';
+			let query = mysqlConnection.query(sql, postPodcast, function (err, result, fields) {
+				if (err) {
+					reject(err);
+				}
+				const id_podcast = result.insertId;
+				feed.items.forEach(item => {
+
+					let post = {
+						podcast_id: id_podcast,
+						name_ep: item.title,
+						upload: new Date(item.pubDate),
+						duracao: item.itunes.duration,
+						thumbnail_ep: item.itunes.image,
+						url_ep: item.link,
+						viewed: 0,
+						imported_t: new Date(Date.now())
+					};
+					let sql = 'INSERT INTO ep SET ?';
+					let query = mysqlConnection.query(sql, post, err => {
+						if (err) {
+							throw err;
+						}
+					});	
+				});
+				resolve("Podcast added");
+			});
+		})
+	}
+	catch (err)	{
+		console.log(err);
+	}
+};
+
+const updateById = async (id) => {
+	try {
+		const todo = await findById(id);
+		if (!todo) {
+			res.writeHead(404, { 'Content-Type': 'application/json' });
+			res.end(JSON.stringify({ message: 'Episode not found!' }));
+		}
+		return new Promise((resolve, reject) => {
+			let sql = `UPDATE ep SET viewed = 1 WHERE id_ep = ${id}`;
+			let query = mysqlConnection.query(sql, err => {
+				if (err){
+					reject(err);
+				}
+				resolve("Ep updated to viewed");
+			});
+		});
+	} catch (err) {
+		console.log(err);
+	}
+};
+//End of controllers
+
 const server = http.createServer(async (req, res) => {
 	if (req.url === '/podcasts' && req.method === 'GET') {
-		const todos = await findAll();
+		const todos = await findAllPodcasts();
 		res.writeHead(200, { 'Content-Type': 'application/json' });
 		res.end(JSON.stringify(todos));
 	}
-	else if (req.url.match(/\/api\/todos\/([a-z A-Z 0-9]+)/) && req.method === 'GET') {
+	else if (req.url === '/' && req.method === 'GET') {
+		res.writeHead(200, { 'Content-Type': 'application/json' });
+		res.end(JSON.stringify({"message": "Welcome to DevCast API"}));
+	}
+	else if (req.url.match(/\/podcasts\/([a-z A-Z 0-9]+)\/episodies/) && req.method === 'GET') {
 		try {
-			const id = req.url.split('/')[3];
-			const todo = await Todo.findById(id);
+			const id = req.url.split('/')[2];
+			const todo = await findById(id);
 			res.writeHead(200, { 'Content-Type': 'application/json' });
 			res.end(JSON.stringify(todo));
 		} catch (error) {
 			res.writeHead(404, { 'Content-Type': 'application/json' });
-			res.end(JSON.stringify({ message: 'Todo not found!' }));
+			res.end(JSON.stringify({ message: 'Podcast not found!' }));
 		}
 	}
-	else if (req.url.match(/\/api\/todos\/([a-z A-Z 0-9]+)/) && req.method === 'DELETE') {
+	else if (req.url.match(/\/episodies\/([a-z A-Z 0-9]+)\/read/) && req.method === 'PUT') {
 		try {
-			const id = req.url.split('/')[3];
-			await Todo.deleteById(id);
-			res.writeHead(200, { 'Content-Type': 'application/json' });
-			res.end(JSON.stringify({ message: 'Todo deleted successfully!!!' }));
-		} catch (error) {
-			console.log(error);
-			res.writeHead(404, { 'Content-Type': 'application/json' });
-			res.end(JSON.stringify({ message: 'Todo not found!' }));
-		}
-	}
-	else if (req.url.match(/\/api\/todos\/([a-z A-Z 0-9]+)/) && req.method === 'PATCH') {
-		try {
-			const body = await getPostData(req);
-			const id = req.url.split('/')[3];
-			const updatedTodo = await Todo.updateById(id, JSON.parse(body));
+			const id = req.url.split('/')[2];
+			const updatedTodo = await updateById(id);
 			res.writeHead(200, { 'Content-Type': 'application/json' });
 			res.end(JSON.stringify(updatedTodo));
 		} catch (error) {
 			console.log(error);
 			res.writeHead(404, { 'Content-Type': 'application/json' });
-			res.end(JSON.stringify({ message: 'Todo not found!' }));
+			res.end(JSON.stringify({ message: 'Podcast not found!' }));
 		}
 	}
-	else if (req.url === '/api/todos' && req.method === 'POST') {
+	else if (req.url === '/podcasts' && req.method === 'POST') {
 		const body = await getPostData(req);
-		const { title, description } = JSON.parse(body);
-		const newTodo = await Todo.create({ title, description });
+		const newTodo = await create(JSON.parse(body));
 		res.writeHead(201, { 'Content-Type': 'application/json' });
 		res.end(JSON.stringify(newTodo));
 	}
@@ -106,10 +176,10 @@ const server = http.createServer(async (req, res) => {
 	//Insert podcast
 	else if (req.url === '/insertpodcast'){
 		let post = {
-			name_podcast: 'Hipsters Ponto Tech',
-			thumbnail_podcast: 'https://hipsters.tech/wp-content/uploads/2016/07/hipsters-logo.png',
-			url_podcast: 'https://hipsters.tech',
-			qtdep: 255
+			name_podcast: 'Lambda3 Podcast (técnico)',
+			thumbnail_podcast: 'https://blog.lambda3.com.br/wp-content/uploads/2016/04/itunes_lambda3.jpg',
+			url_podcast: 'https://www.lambda3.com.br/blog-en/',
+			qtdep: 244
 		};
 		let sql = 'INSERT INTO podcast SET ?';
 		let query = mysqlConnection.query(sql, post, err => {
@@ -121,14 +191,14 @@ const server = http.createServer(async (req, res) => {
 	}
 	//Insert eps
 	else if (req.url === '/insertep'){
-		const date1 = new Date("Wed, 27 July 2016 13:30:00");
+		const date1 = new Date("Fri, 23 Apr 2021 13:00:49 +0000");
 		let post = {
-			podcast_id: 1,
-			name_ep: 'Vida de Agência – Hipsters #02 Bora FIIIII',
+			podcast_id: 2,
+			name_ep: 'Lambda3 Podcast 240 – Introdução React',
 			upload: date1,
-			duracao: '39:03',
-			thumbnail_ep: 'http://hipsters.tech/wp-content/uploads/2016/08/Hipsters1.png',
-			url_ep: 'https://hipsters.tech/tecnologias-no-nubank-hipsters-01/',
+			duracao: '1:19:53',
+			thumbnail_ep: 'https://www.lambda3.com.br/wp-content/uploads//2021/04/Podcasts_lambda_244-600x600.jpg',
+			url_ep: 'https://www.lambda3.com.br/2021/04/lambda3-podcast-244-conteudo-tecnico-em-portugues/',
 			viewed: 0,
 			imported_t: new Date(Date.now())
 		};
@@ -142,7 +212,7 @@ const server = http.createServer(async (req, res) => {
 	}
 	else {
 		res.writeHead(404, { 'Content-Type': 'application/json' });
-		res.end(JSON.stringify({ message: 'Route not found!' }));
+		res.end(JSON.stringify({ message: 'Route not found!', request: req.url }));
 	}
 });
 

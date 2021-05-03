@@ -3,7 +3,7 @@ let parser = new Parser();
 
 (async () => {
 
-  let feed = await parser.parseURL('https://hipsters.tech/feed/podcast/');
+  let feed = await parser.parseURL('https://loopmatinal.libsyn.com/rss');
   console.log(feed.title);
   console.log(feed.link);
   console.log(feed.image.url);
