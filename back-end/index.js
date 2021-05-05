@@ -6,7 +6,7 @@ let Parser = require('rss-parser');
 let parser = new Parser();
 
 const mysqlConnection = mysql.createConnection({
-	host : "192.168.0.6",
+	host : "192.168.0.5",
 	user : "username",
 	password : "password",
 	database: "nodemysql"
@@ -36,6 +36,14 @@ const findById = (id) => {
 		});
 	});
 };
+//Get the total amount of a podcast episodes
+const getQtd = (feed) => {
+	let quantidade = 0;
+	feed.items.forEach(item => {
+		quantidade++;
+	})
+	return quantidade;
+}
 
 const create = async (url) => {
 	try {
@@ -46,7 +54,7 @@ const create = async (url) => {
 				name_podcast: feed.title,
 				thumbnail_podcast: feed.image.url,
 				url_podcast: feed.link,
-				qtdep: 244
+				qtdep: getQtd(feed)
 			};
 			let sql = 'INSERT INTO podcast SET ?';
 			let query = mysqlConnection.query(sql, postPodcast, function (err, result, fields) {
@@ -78,7 +86,7 @@ const create = async (url) => {
 		})
 	}
 	catch (err)	{
-		console.log(err);
+		throw(err);
 	}
 };
 
@@ -99,7 +107,7 @@ const updateById = async (id) => {
 			});
 		});
 	} catch (err) {
-		console.log(err);
+		throw(err);
 	}
 };
 //End of controllers
